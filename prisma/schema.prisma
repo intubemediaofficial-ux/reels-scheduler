@@ -1,0 +1,652 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum SocialPlatform {
+  FACEBOOK_PAGE
+  INSTAGRAM
+}
+
+enum ConnectionStatus {
+  CONNECTED
+  PERMISSION_REQUIRED
+  TOKEN_EXPIRING
+  DISCONNECTED
+  ERROR
+}
+
+enum AccountHealth {
+  CONNECTED
+  PERMISSION_REQUIRED
+  TOKEN_EXPIRING
+  DISCONNECTED
+  ERROR
+}
+
+enum MediaStorageStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  INSPECTING
+  READY
+  INVALID
+  DELETED
+}
+
+enum UploadBatchStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+}
+
+enum CaptionKind {
+  SHORT
+  STANDARD
+  PROMOTIONAL
+  MANUAL
+}
+
+enum CaptionLanguage {
+  EN
+  HI
+  HINGLISH
+}
+
+enum PostStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  PARTIALLY_PUBLISHED
+  FAILED
+  REJECTED
+  CANCELLED
+}
+
+enum DestinationStatus {
+  PENDING
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  CANCELLED
+}
+
+enum PublishJobStatus {
+  QUEUED
+  LOCKED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  RETRY_SCHEDULED
+  EXHAUSTED
+  CANCELLED
+}
+
+enum PublishErrorClass {
+  VALIDATION
+  TOKEN_EXPIRED
+  PERMISSION_MISSING
+  RATE_LIMITED
+  MEDIA_PROCESSING_FAILED
+  ACCOUNT_RESTRICTED
+  META_TEMPORARY_OUTAGE
+  UNKNOWN
+}
+
+enum AudioMode {
+  EMBEDDED
+  PLATFORM
+}
+
+enum NotificationType {
+  ACCOUNT_CONNECTED
+  PERMISSION_LOST
+  TOKEN_EXPIRING
+  POST_APPROVED
+  POST_REJECTED
+  POST_SCHEDULED
+  POST_PUBLISHED
+  POST_FAILED
+  RETRY_EXHAUSTED
+  WORKSPACE_INVITE
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  passwordHash  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  memberships         WorkspaceMember[]
+  sentInvitations     Invitation[]         @relation("InvitationInviter")
+  passwordResetTokens PasswordResetToken[]
+  sessions            Session[]
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+  uploadedMedia       MediaAsset[]         @relation("MediaUploader")
+  createdPosts        Post[]               @relation("PostCreator")
+  approvedPosts       Post[]               @relation("PostApprover")
+  captionVersions     CaptionVersion[]
+  socialConnections   SocialConnection[]
+  uploadBatches       UploadBatch[]
+}
+
+model Session {
+  id           String   @id @default(uuid()) @db.Uuid
+  sessionToken String   @unique
+  userId       String   @db.Uuid
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy
+// ---------------------------------------------------------------------------
+
+model Workspace {
+  id                      String    @id @default(uuid()) @db.Uuid
+  name                    String
+  slug                    String    @unique
+  logoUrl                 String?
+  timezone                String    @default("Asia/Kolkata")
+  defaultCaptionLanguage  CaptionLanguage @default(HINGLISH)
+  approvalRequired        Boolean   @default(true)
+  autoApproveAiCaptions   Boolean   @default(false)
+  safePublishIntervalSec  Int       @default(300)
+  mediaRetentionDays      Int?
+  storageLimitBytes       BigInt    @default(53687091200)
+  notificationPreferences Json      @default("{}")
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  deletedAt               DateTime?
+
+  members           WorkspaceMember[]
+  invitations       Invitation[]
+  brandKit          BrandKit?
+  socialConnections SocialConnection[]
+  socialAccounts    SocialAccount[]
+  mediaAssets       MediaAsset[]
+  uploadBatches     UploadBatch[]
+  posts             Post[]
+  publishJobs       PublishJob[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  captionTemplates  CaptionTemplate[]
+}
+
+model WorkspaceMember {
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @db.Uuid
+  userId      String        @db.Uuid
+  role        WorkspaceRole @default(VIEWER)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Invitation {
+  id          String           @id @default(uuid()) @db.Uuid
+  workspaceId String           @db.Uuid
+  email       String
+  role        WorkspaceRole    @default(EDITOR)
+  tokenHash   String           @unique
+  status      InvitationStatus @default(PENDING)
+  invitedById String           @db.Uuid
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy User      @relation("InvitationInviter", fields: [invitedById], references: [id])
+
+  @@index([workspaceId, email])
+  @@index([workspaceId, status])
+}
+
+model BrandKit {
+  id                String          @id @default(uuid()) @db.Uuid
+  workspaceId       String          @unique @db.Uuid
+  brandName         String?
+  logoUrl           String?
+  brandColors       String[]        @default([])
+  preferredLanguage CaptionLanguage @default(HINGLISH)
+  writingTone       String          @default("Friendly")
+  defaultCta        String?
+  defaultHashtags   String[]        @default([])
+  wordsToAvoid      String[]        @default([])
+  requiredLegalText String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Meta connections
+// ---------------------------------------------------------------------------
+
+/// One Meta OAuth authorization by a workspace user (a Facebook user login).
+model SocialConnection {
+  id              String           @id @default(uuid()) @db.Uuid
+  workspaceId     String           @db.Uuid
+  connectedById   String           @db.Uuid
+  metaUserId      String
+  metaUserName    String?
+  grantedScopes   String[]         @default([])
+  status          ConnectionStatus @default(CONNECTED)
+  lastCheckedAt   DateTime?
+  lastError       String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  deletedAt       DateTime?
+
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connectedBy User             @relation(fields: [connectedById], references: [id])
+  credential  OAuthCredential?
+  accounts    SocialAccount[]
+
+  @@unique([workspaceId, metaUserId])
+  @@index([workspaceId, status])
+}
+
+/// A Facebook Page or Instagram Professional account added to a workspace.
+model SocialAccount {
+  id                 String         @id @default(uuid()) @db.Uuid
+  workspaceId        String         @db.Uuid
+  connectionId       String         @db.Uuid
+  platform           SocialPlatform
+  externalId         String
+  facebookPageId     String?
+  displayName        String
+  username           String?
+  profileImageUrl    String?
+  health             AccountHealth  @default(CONNECTED)
+  healthCheckedAt    DateTime?
+  healthMessage      String?
+  publishingLimitUsed Int?
+  publishingLimitCheckedAt DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  deletedAt          DateTime?
+
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection   SocialConnection  @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  credential   OAuthCredential?
+  destinations PostDestination[]
+  publishJobs  PublishJob[]
+
+  @@unique([workspaceId, platform, externalId])
+  @@index([workspaceId, health])
+  @@index([connectionId])
+}
+
+/// Encrypted tokens. Never selected by default UI queries; only the publisher
+/// and the Meta adapter read them via `lib/crypto`.
+model OAuthCredential {
+  id                    String    @id @default(uuid()) @db.Uuid
+  connectionId          String?   @unique @db.Uuid
+  socialAccountId       String?   @unique @db.Uuid
+  encryptedAccessToken  String
+  tokenType             String    @default("bearer")
+  expiresAt             DateTime?
+  scopes                String[]  @default([])
+  lastRefreshedAt       DateTime?
+  revokedAt             DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  connection    SocialConnection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount?    @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Media
+// ---------------------------------------------------------------------------
+
+model UploadBatch {
+  id          String            @id @default(uuid()) @db.Uuid
+  workspaceId String            @db.Uuid
+  createdById String            @db.Uuid
+  name        String
+  status      UploadBatchStatus @default(OPEN)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User         @relation(fields: [createdById], references: [id])
+  assets    MediaAsset[]
+
+  @@index([workspaceId, createdAt])
+}
+
+model MediaAsset {
+  id               String             @id @default(uuid()) @db.Uuid
+  workspaceId      String             @db.Uuid
+  uploadedById     String             @db.Uuid
+  batchId          String?            @db.Uuid
+  originalFilename String
+  storageKey       String             @unique
+  thumbnailKey     String?
+  mimeType         String?
+  fileSizeBytes    BigInt?
+  sha256           String?
+  durationSec      Float?
+  width            Int?
+  height           Int?
+  aspectRatio      String?
+  videoCodec       String?
+  audioCodec       String?
+  hasAudio         Boolean?
+  frameRate        Float?
+  storageStatus    MediaStorageStatus @default(PENDING_UPLOAD)
+  validationErrors Json?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  deletedAt        DateTime?
+
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  uploadedBy   User          @relation("MediaUploader", fields: [uploadedById], references: [id])
+  batch        UploadBatch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  songMetadata SongMetadata?
+  posts        Post[]
+
+  @@unique([workspaceId, sha256])
+  @@index([workspaceId, storageStatus])
+  @@index([workspaceId, createdAt])
+  @@index([batchId])
+}
+
+model SongMetadata {
+  id                  String    @id @default(uuid()) @db.Uuid
+  mediaAssetId        String    @unique @db.Uuid
+  songTitle           String?
+  artist              String?
+  album               String?
+  musicLabel          String?
+  language            String?
+  genre               String?
+  mood                String?
+  releaseDate         DateTime?
+  callToAction        String?
+  destinationUrl      String?
+  customKeywords      String[]  @default([])
+  copyrightConfirmed  Boolean   @default(false)
+  copyrightConfirmedById String? @db.Uuid
+  copyrightConfirmedAt   DateTime?
+  internalNotes       String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  mediaAsset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Posts & captions
+// ---------------------------------------------------------------------------
+
+model Post {
+  id            String     @id @default(uuid()) @db.Uuid
+  workspaceId   String     @db.Uuid
+  mediaAssetId  String     @db.Uuid
+  createdById   String     @db.Uuid
+  approvedById  String?    @db.Uuid
+  title         String?
+  status        PostStatus @default(DRAFT)
+  audioMode     AudioMode  @default(EMBEDDED)
+  commonCaption String?
+  rejectionComment String?
+  approvedAt    DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  mediaAsset   MediaAsset        @relation(fields: [mediaAssetId], references: [id])
+  createdBy    User              @relation("PostCreator", fields: [createdById], references: [id])
+  approvedBy   User?             @relation("PostApprover", fields: [approvedById], references: [id])
+  captions     CaptionVersion[]
+  destinations PostDestination[]
+  schedule     Schedule?
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, createdAt])
+  @@index([mediaAssetId])
+}
+
+model CaptionVersion {
+  id            String          @id @default(uuid()) @db.Uuid
+  postId        String          @db.Uuid
+  destinationId String?         @db.Uuid
+  platform      SocialPlatform?
+  kind          CaptionKind
+  language      CaptionLanguage
+  text          String
+  hashtags      String[]        @default([])
+  callToAction  String?
+  aiGenerated   Boolean         @default(false)
+  aiModel       String?
+  aiPromptHash  String?
+  isSelected    Boolean         @default(false)
+  createdById   String?         @db.Uuid
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  post        Post             @relation(fields: [postId], references: [id], onDelete: Cascade)
+  destination PostDestination? @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  createdBy   User?            @relation(fields: [createdById], references: [id])
+
+  @@index([postId, isSelected])
+}
+
+model CaptionTemplate {
+  id          String          @id @default(uuid()) @db.Uuid
+  workspaceId String          @db.Uuid
+  name        String
+  text        String
+  hashtags    String[]        @default([])
+  language    CaptionLanguage
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+/// One row per (post, target account). Each destination publishes independently.
+model PostDestination {
+  id              String            @id @default(uuid()) @db.Uuid
+  postId          String            @db.Uuid
+  socialAccountId String            @db.Uuid
+  status          DestinationStatus @default(PENDING)
+  metaMediaId     String?
+  metaContainerId String?
+  permalink       String?
+  publishedAt     DateTime?
+  lastErrorClass  PublishErrorClass?
+  lastErrorMessage String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  post          Post             @relation(fields: [postId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount    @relation(fields: [socialAccountId], references: [id])
+  captions      CaptionVersion[]
+  publishJobs   PublishJob[]
+
+  @@unique([postId, socialAccountId])
+  @@index([socialAccountId, status])
+}
+
+model Schedule {
+  id           String   @id @default(uuid()) @db.Uuid
+  postId       String   @unique @db.Uuid
+  scheduledAt  DateTime
+  timezone     String
+  scheduledById String? @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledAt])
+}
+
+// ---------------------------------------------------------------------------
+// Publishing engine
+// ---------------------------------------------------------------------------
+
+/// Exactly one job per destination per schedule version guarantees idempotency:
+/// `idempotencyKey` = `${destinationId}:${scheduleVersion}` and is unique.
+model PublishJob {
+  id              String           @id @default(uuid()) @db.Uuid
+  workspaceId     String           @db.Uuid
+  destinationId   String           @db.Uuid
+  socialAccountId String           @db.Uuid
+  idempotencyKey  String           @unique
+  queueJobId      String?
+  status          PublishJobStatus @default(QUEUED)
+  runAt           DateTime
+  lockedAt        DateTime?
+  lockedBy        String?
+  attemptCount    Int              @default(0)
+  maxAttempts     Int              @default(5)
+  nextRetryAt     DateTime?
+  lastErrorClass  PublishErrorClass?
+  lastErrorMessage String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  workspace     Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  destination   PostDestination  @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount    @relation(fields: [socialAccountId], references: [id])
+  attempts      PublishAttempt[]
+
+  @@index([status, runAt])
+  @@index([workspaceId, status])
+  @@index([socialAccountId, runAt])
+  @@index([destinationId])
+}
+
+model PublishAttempt {
+  id               String             @id @default(uuid()) @db.Uuid
+  jobId            String             @db.Uuid
+  attemptNumber    Int
+  startedAt        DateTime           @default(now())
+  finishedAt       DateTime?
+  success          Boolean?
+  errorClass       PublishErrorClass?
+  errorMessage     String?
+  metaContainerId  String?
+  metaMediaId      String?
+  sanitizedResponse Json?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  job PublishJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, attemptNumber])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications & audit
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id          String           @id @default(uuid()) @db.Uuid
+  workspaceId String           @db.Uuid
+  userId      String           @db.Uuid
+  type        NotificationType
+  title       String
+  body        String?
+  href        String?
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([workspaceId, createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String?  @db.Uuid
+  actorId     String?  @db.Uuid
+  action      String
+  targetType  String?
+  targetId    String?
+  metadata    Json?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actor     User?      @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([actorId])
+  @@index([targetType, targetId])
+}
