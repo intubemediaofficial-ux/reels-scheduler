@@ -11,6 +11,9 @@ const schema = z.object({
   META_GRAPH_API_VERSION: z.string().regex(/^v\d+\.\d+$/).default("v24.0"),
   META_OAUTH_REDIRECT_URI: z.string().default("http://localhost:3000/api/meta/callback"),
   META_PROVIDER: z.enum(["mock", "graph"]).default("mock"),
+  META_SCOPES: z
+    .string()
+    .default("pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish,business_management"),
   TOKEN_ENCRYPTION_KEY: z.string().min(1),
 
   OPENAI_API_KEY: z.string().default(""),
@@ -24,6 +27,13 @@ const schema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().default(""),
   S3_PUBLIC_OR_SIGNED_MEDIA_BASE_URL: z.string().default(""),
   STORAGE_PROVIDER: z.enum(["local", "s3"]).default("local"),
+  STORAGE_LOCAL_DIR: z.string().default("./storage"),
+
+  REEL_MAX_FILE_MB: z.coerce.number().int().positive().default(1024),
+  REEL_MIN_DURATION_SEC: z.coerce.number().positive().default(3),
+  REEL_MAX_DURATION_SEC: z.coerce.number().positive().default(90),
+  REEL_MIN_WIDTH: z.coerce.number().int().positive().default(540),
+  PUBLISH_WORKER_ID: z.string().default("worker-1"),
 
   EMAIL_PROVIDER_API_KEY: z.string().default(""),
   SENTRY_DSN: z.string().default(""),

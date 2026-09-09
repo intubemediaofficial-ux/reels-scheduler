@@ -7,6 +7,7 @@ import { ROLE_LABELS } from "@/lib/rbac";
 import { signOutAction } from "@/server/actions/auth.actions";
 import { SidebarNav } from "./sidebar-nav";
 import { WorkspaceSwitcher } from "./workspace-switcher";
+import { unreadCount } from "@/server/services/notification.service";
 
 export default async function WorkspaceLayout({ children, params }: { children: ReactNode; params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -17,10 +18,15 @@ export default async function WorkspaceLayout({ children, params }: { children: 
     if (e instanceof AppError && e.code === "NOT_FOUND") notFound();
     throw e;
   }
-  const memberships = await listUserWorkspaces(ctx.userId);
+  const [memberships, unread] = await Promise.all([listUserWorkspaces(ctx.userId), unreadCount(ctx.workspace.id, ctx.userId)]);
 
   const nav = [
     { href: `/w/${slug}`, label: "Dashboard" },
+    { href: `/w/${slug}/library`, label: "Content Library", show: ctx.can("media.read") },
+    { href: `/w/${slug}/posts`, label: "Posts", show: ctx.can("posts.read") },
+    { href: `/w/${slug}/calendar`, label: "Calendar", show: ctx.can("posts.read") },
+    { href: `/w/${slug}/accounts`, label: "Connected Accounts", show: ctx.can("accounts.read") },
+    { href: `/w/${slug}/notifications`, label: unread ? `Notifications (${unread})` : "Notifications", show: ctx.can("notifications.read") },
     { href: `/w/${slug}/team`, label: "Team & Roles", show: ctx.can("members.read") },
     { href: `/w/${slug}/settings`, label: "Workspace Settings", show: ctx.can("workspace.settings.manage") },
     { href: `/w/${slug}/audit`, label: "Audit Log", show: ctx.can("audit.read") },
