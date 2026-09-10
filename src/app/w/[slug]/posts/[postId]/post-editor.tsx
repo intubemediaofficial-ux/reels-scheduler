@@ -117,11 +117,38 @@ export function PostEditor({ slug, post }: { slug: string; post: PostEditorData 
 
   const captionLimit = 2200;
 
+  const isScheduledOrLater = ["SCHEDULED", "PUBLISHING", "PUBLISHED", "PARTIALLY_PUBLISHED", "FAILED"].includes(post.status);
+  const steps = [
+    { id: "video", label: "Video & song", done: post.asset.status === "READY" && post.asset.copyrightConfirmed, hint: post.asset.copyrightConfirmed ? `${post.asset.songTitle ?? post.asset.filename}` : "Add song details + confirm copyright" },
+    { id: "destinations", label: "Destinations", done: post.destinations.length > 0, hint: post.destinations.length ? `${post.destinations.length} account(s)` : "Tick Instagram / Facebook accounts" },
+    { id: "caption", label: "Caption", done: post.captions.some((c) => c.isSelected), hint: post.captions.some((c) => c.isSelected) ? "Selected" : "Generate or write, then Select" },
+    { id: "approve", label: "Approve", done: ["APPROVED"].includes(post.status) || isScheduledOrLater, hint: post.status === "PENDING_APPROVAL" ? "Waiting for approver" : post.status === "REJECTED" ? "Rejected — fix & resubmit" : "" },
+    { id: "schedule", label: "Schedule / publish", done: isScheduledOrLater, hint: post.schedule ? new Date(post.schedule.scheduledAt).toLocaleString("en-IN", { timeZone: post.schedule.timezone, dateStyle: "medium", timeStyle: "short" }) : "Pick a date & time or Publish now" },
+  ];
+  const currentStep = steps.findIndex((s) => !s.done);
+
   return (
+    <>
+    <ol className="mb-6 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-5">
+      {steps.map((s, i) => {
+        const current = i === currentStep;
+        return (
+          <li key={s.id}>
+            <a href={`#${s.id}`} className={`flex h-full items-start gap-2 rounded-lg px-2 py-1.5 text-sm ${current ? "bg-indigo-50 ring-1 ring-indigo-200" : "hover:bg-slate-50"}`}>
+              <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-semibold ${s.done ? "bg-emerald-500 text-white" : current ? "bg-indigo-600 text-white" : "bg-slate-200 text-slate-600"}`}>{s.done ? "✓" : i + 1}</span>
+              <span className="min-w-0">
+                <span className={`block font-medium ${s.done ? "text-slate-700" : "text-slate-900"}`}>{s.label}</span>
+                {s.hint ? <span className="block truncate text-xs text-slate-500">{s.hint}</span> : null}
+              </span>
+            </a>
+          </li>
+        );
+      })}
+    </ol>
     <div className="grid gap-6 lg:grid-cols-3">
       {/* Left: video + status */}
       <div className="space-y-4">
-        <Card title="Video">
+        <Card title="Video" className="scroll-mt-4" id="video">
           {post.previewUrl ? <video src={post.previewUrl} controls playsInline className="max-h-[420px] w-full rounded-lg bg-black" /> : <div className="flex h-48 items-center justify-center rounded-lg bg-slate-100 text-sm text-slate-500">Preview unavailable ({post.asset.status.toLowerCase()})</div>}
           <dl className="mt-3 space-y-1 text-xs text-slate-600">
             <div className="flex justify-between"><dt>File</dt><dd className="truncate pl-2">{post.asset.filename}</dd></div>
@@ -152,7 +179,7 @@ export function PostEditor({ slug, post }: { slug: string; post: PostEditorData 
           </form>
         </Card>
 
-        <Card title="Destinations" description="Where this Reel will be published.">
+        <Card title="Destinations" description="Where this Reel will be published." className="scroll-mt-4" id="destinations">
           {post.accounts.length === 0 ? (
             <p className="text-sm text-slate-600">No accounts connected yet. <Link href={`/w/${slug}/accounts`} className="text-indigo-600 hover:underline">Connect Facebook / Instagram</Link>.</p>
           ) : (
@@ -186,7 +213,7 @@ export function PostEditor({ slug, post }: { slug: string; post: PostEditorData 
       </div>
 
       {/* Middle: captions */}
-      <div className="space-y-4">
+      <div className="space-y-4 scroll-mt-4" id="caption">
         {post.can.generate && editable ? (
           <Card title="Generate caption" description="AI drafts a caption from the song metadata; you always review before anything is published.">
             <div className="grid grid-cols-2 gap-2 text-sm">
@@ -267,7 +294,7 @@ export function PostEditor({ slug, post }: { slug: string; post: PostEditorData 
           {readiness.length === 0 ? <p className="text-sm text-emerald-700">Ready to schedule.</p> : <ul className="list-disc space-y-1 pl-5 text-sm text-amber-800">{readiness.map((r) => <li key={r}>{r}</li>)}</ul>}
         </Card>
 
-        <Card title="Approval">
+        <Card title="Approval" className="scroll-mt-4" id="approve">
           <div className="flex flex-wrap gap-2">
             {post.status === "DRAFT" || post.status === "REJECTED" ? (
               <>
@@ -288,7 +315,7 @@ export function PostEditor({ slug, post }: { slug: string; post: PostEditorData 
         </Card>
 
         {post.can.schedule ? (
-          <Card title="Schedule" description={post.approvalRequired ? "Approval is required before scheduling." : "Approval optional in this workspace."}>
+          <Card title="Schedule" className="scroll-mt-4" id="schedule" description={post.approvalRequired ? "Approval is required before scheduling." : "Approval optional in this workspace."}>
             {post.schedule ? <p className="mb-2 text-sm text-slate-700">Currently: <strong>{new Date(post.schedule.scheduledAt).toLocaleString("en-IN", { timeZone: post.schedule.timezone })}</strong> ({post.schedule.timezone})</p> : null}
             {["APPROVED", "SCHEDULED", "DRAFT", "PENDING_APPROVAL", "FAILED", "PARTIALLY_PUBLISHED"].includes(post.status) ? (
               <div className="space-y-2">
@@ -331,5 +358,6 @@ export function PostEditor({ slug, post }: { slug: string; post: PostEditorData 
         ) : null}
       </div>
     </div>
+    </>
   );
 }

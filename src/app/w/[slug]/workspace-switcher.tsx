@@ -8,6 +8,7 @@ export function WorkspaceSwitcher({ current, workspaces }: { current: string; wo
   return (
     <Select
       aria-label="Switch workspace"
+      className="border-white/10 bg-white/5 text-white focus:border-indigo-400 focus:ring-indigo-500/30 [&>option]:text-slate-900"
       value={current}
       onChange={(e) => {
         const v = e.target.value;
