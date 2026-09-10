@@ -73,9 +73,9 @@ export function Field({ label, htmlFor, hint, children }: { label: string; htmlF
   );
 }
 
-export function Card({ title, description, children, actions, className }: { title?: string; description?: string; children: ReactNode; actions?: ReactNode; className?: string }) {
+export function Card({ title, description, children, actions, className, id }: { title?: string; description?: string; children: ReactNode; actions?: ReactNode; className?: string; id?: string }) {
   return (
-    <section className={clsx("rounded-xl border border-slate-200 bg-white p-5 shadow-sm", className)}>
+    <section id={id} className={clsx("rounded-xl border border-slate-200 bg-white p-5 shadow-sm", className)}>
       {title || actions ? (
         <header className="mb-4 flex items-start justify-between gap-4">
           <div>

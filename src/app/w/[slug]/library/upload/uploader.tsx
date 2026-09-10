@@ -13,6 +13,7 @@ type Item = {
   status: "queued" | "hashing" | "uploading" | "processing" | "ready" | "invalid" | "error";
   message?: string;
   warnings?: string[];
+  assetId?: string;
 };
 
 const CONCURRENCY = 3;
@@ -79,6 +80,7 @@ export function Uploader({ slug, maxMb }: { slug: string; maxMb: number }) {
       const done = await completeUploadAction(slug, init.data.assetId);
       if (!done.ok) throw new Error(done.error);
       update(item.id, {
+        assetId: init.data.assetId,
         status: done.data.status === "READY" ? "ready" : "invalid",
         message: done.data.errors.join(" ") || undefined,
         warnings: done.data.warnings,
@@ -112,7 +114,9 @@ export function Uploader({ slug, maxMb }: { slug: string; maxMb: number }) {
   }
 
   const pending = items.filter((i) => i.status === "queued" || i.status === "error").length;
-  const readyCount = items.filter((i) => i.status === "ready").length;
+  const readyItems = items.filter((i) => i.status === "ready");
+  const readyCount = readyItems.length;
+  const readyAssetIds = readyItems.map((i) => i.assetId).filter((x): x is string => Boolean(x));
 
   return (
     <div className="space-y-4">
@@ -149,6 +153,25 @@ export function Uploader({ slug, maxMb }: { slug: string; maxMb: number }) {
       </div>
 
       {error ? <Alert>{error}</Alert> : null}
+
+      {!running && readyCount > 0 && !pending ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <p className="text-sm font-semibold text-emerald-900">{readyCount} video(s) uploaded. What next?</p>
+          <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-emerald-900/90">
+            <li><span className="font-medium">Add song details</span> (title, artist) and confirm copyright.</li>
+            <li><span className="font-medium">Create a post</span> for each video — that opens the editor where you write the caption, pick Instagram / Facebook accounts and approve.</li>
+            <li><span className="font-medium">Schedule</span> a date &amp; time (or Publish now). The publisher posts it automatically.</li>
+          </ol>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button type="button" onClick={() => router.push(`/w/${slug}/library/batch?ids=${readyAssetIds.join(",")}&next=posts`)}>
+              Add song details → create posts
+            </Button>
+            <Button variant="secondary" type="button" onClick={() => router.push(`/w/${slug}/library`)}>
+              Go to library
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {items.length ? (
         <div className="rounded-xl border border-slate-200 bg-white">
