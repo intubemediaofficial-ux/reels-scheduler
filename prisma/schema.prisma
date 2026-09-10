@@ -530,7 +530,7 @@ model PostDestination {
   updatedAt       DateTime          @updatedAt
 
   post          Post             @relation(fields: [postId], references: [id], onDelete: Cascade)
-  socialAccount SocialAccount    @relation(fields: [socialAccountId], references: [id])
+  socialAccount SocialAccount    @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
   captions      CaptionVersion[]
   publishJobs   PublishJob[]
 
@@ -579,7 +579,7 @@ model PublishJob {
 
   workspace     Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   destination   PostDestination  @relation(fields: [destinationId], references: [id], onDelete: Cascade)
-  socialAccount SocialAccount    @relation(fields: [socialAccountId], references: [id])
+  socialAccount SocialAccount    @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
   attempts      PublishAttempt[]
 
   @@index([status, runAt])

@@ -1,6 +1,7 @@
 import type { CaptionLanguage } from "@prisma/client";
 
-export type CaptionTone = "Energetic" | "Devotional" | "Romantic" | "Professional" | "Luxury" | "Friendly";
+export const CAPTION_TONES = ["Friendly", "Energetic", "Romantic", "Emotional", "Devotional", "Professional", "Luxury", "Minimal"] as const;
+export type CaptionTone = (typeof CAPTION_TONES)[number];
 
 export type CaptionRequest = {
   song: {
